@@ -71,6 +71,38 @@ class NIDService {
         }
     }
 
+    /**
+     * Generates a specific message based on verification details
+     * @param {Object} fieldVerificationResult - The field verification results
+     * @returns {string} - A specific message describing which fields match/don't match
+     */
+    generateVerificationMessage(fieldVerificationResult) {
+        const { nameEn, dateOfBirth } = fieldVerificationResult || {};
+        
+        // If all fields match
+        if (nameEn === true && dateOfBirth === true) {
+            return 'NID verification successful - all provided information matches';
+        }
+        
+        // If no fields match
+        if (nameEn === false && dateOfBirth === false) {
+            return 'NID found but provided name and date of birth do not match the records';
+        }
+        
+        // If only name matches
+        if (nameEn === true && dateOfBirth === false) {
+            return 'NID found and name matches, but provided date of birth does not match the records';
+        }
+        
+        // If only date of birth matches
+        if (nameEn === false && dateOfBirth === true) {
+            return 'NID found and date of birth matches, but provided name does not match the records';
+        }
+        
+        // Default fallback
+        return 'NID found but verification data does not match';
+    }
+
     async verifyNID(nid, dateOfBirth, nameEn) {
         try {
             await this.ensureValidToken();
@@ -110,15 +142,17 @@ class NIDService {
                 logger.warn(`NID verification data mismatch for ${nid}: Name or DOB doesn't match records`);
                 logger.info(`406 Response field results:`, response.data.fieldVerificationResult);
                 
+                const fieldVerificationResult = response.data.fieldVerificationResult || {
+                    nameEn: false,
+                    dateOfBirth: false
+                };
+                
                 const result = {
                     success: true,
                     verified: response.data.verified || false,
                     data: response.data.data || {},
-                    fieldVerificationResult: response.data.fieldVerificationResult || {
-                        nameEn: false,
-                        dateOfBirth: false
-                    },
-                    message: 'NID found but verification data does not match'
+                    fieldVerificationResult: fieldVerificationResult,
+                    message: this.generateVerificationMessage(fieldVerificationResult)
                 };
 
                 // Process photo if available
@@ -135,12 +169,19 @@ class NIDService {
                 logger.info(`Response data keys:`, Object.keys(response.data));
                 logger.info(`Success object keys:`, response.data.success ? Object.keys(response.data.success) : 'No success object');
                 
+                const fieldVerificationResult = response.data.fieldVerificationResult || {};
+                
                 const result = {
                     success: true,
                     verified: response.data.verified || false,
                     data: response.data.success?.data || {},
-                    fieldVerificationResult: response.data.fieldVerificationResult || {}
+                    fieldVerificationResult: fieldVerificationResult
                 };
+                
+                // Add message if verification data doesn't match
+                if (!result.verified) {
+                    result.message = this.generateVerificationMessage(fieldVerificationResult);
+                }
                 
                 // Process photo if available
                 if (result.data.photo) {
@@ -169,15 +210,17 @@ class NIDService {
                 logger.warn(`NID verification data mismatch for ${nid}: Name or DOB doesn't match records`);
                 logger.info(`406 Error Response field results:`, error.response.data.fieldVerificationResult);
                 
+                const fieldVerificationResult = error.response.data.fieldVerificationResult || {
+                    nameEn: false,
+                    dateOfBirth: false
+                };
+                
                 const result = {
                     success: true,
                     verified: error.response.data.verified || false,
                     data: error.response.data.data || {},
-                    fieldVerificationResult: error.response.data.fieldVerificationResult || {
-                        nameEn: false,
-                        dateOfBirth: false
-                    },
-                    message: 'NID found but verification data does not match'
+                    fieldVerificationResult: fieldVerificationResult,
+                    message: this.generateVerificationMessage(fieldVerificationResult)
                 };
 
                 // Process photo if available
