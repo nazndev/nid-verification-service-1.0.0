@@ -1,5 +1,6 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
+const { fetchImageAsBase64, isValidImageUrl } = require('../utils/imageUtils');
 
 class NIDService {
     constructor() {
@@ -109,7 +110,7 @@ class NIDService {
                 logger.warn(`NID verification data mismatch for ${nid}: Name or DOB doesn't match records`);
                 logger.info(`406 Response field results:`, response.data.fieldVerificationResult);
                 
-                return {
+                const result = {
                     success: true,
                     verified: response.data.verified || false,
                     data: response.data.data || {},
@@ -119,6 +120,13 @@ class NIDService {
                     },
                     message: 'NID found but verification data does not match'
                 };
+
+                // Process photo if available
+                if (result.data.photo) {
+                    await this.processPhoto(result.data);
+                }
+
+                return result;
             }
 
             if (response.data.status === 'OK') {
@@ -133,6 +141,11 @@ class NIDService {
                     data: response.data.success?.data || {},
                     fieldVerificationResult: response.data.fieldVerificationResult || {}
                 };
+                
+                // Process photo if available
+                if (result.data.photo) {
+                    await this.processPhoto(result.data);
+                }
                 
                 logger.info(`Parsed result - Verified: ${result.verified}, Field Results:`, result.fieldVerificationResult);
                 logger.info(`Full result object:`, JSON.stringify(result, null, 2));
@@ -156,7 +169,7 @@ class NIDService {
                 logger.warn(`NID verification data mismatch for ${nid}: Name or DOB doesn't match records`);
                 logger.info(`406 Error Response field results:`, error.response.data.fieldVerificationResult);
                 
-                return {
+                const result = {
                     success: true,
                     verified: error.response.data.verified || false,
                     data: error.response.data.data || {},
@@ -166,9 +179,43 @@ class NIDService {
                     },
                     message: 'NID found but verification data does not match'
                 };
+
+                // Process photo if available
+                if (result.data.photo) {
+                    await this.processPhoto(result.data);
+                }
+
+                return result;
             }
             
             throw new Error(`NID verification failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Processes the photo URL by fetching the image and converting it to base64
+     * @param {Object} personData - The person data object containing the photo URL
+     */
+    async processPhoto(personData) {
+        try {
+            if (!personData.photo || !isValidImageUrl(personData.photo)) {
+                logger.warn(`Invalid or missing photo URL: ${personData.photo}`);
+                return;
+            }
+
+            logger.info(`Processing photo for NID verification`);
+            
+            // Fetch and convert photo to base64
+            const base64Photo = await fetchImageAsBase64(personData.photo);
+            
+            // Replace the photo URL with base64 data
+            personData.photo = base64Photo;
+            
+            logger.info(`Successfully processed photo and converted to base64`);
+        } catch (error) {
+            logger.error(`Failed to process photo: ${error.message}`);
+            // Keep the original photo URL if processing fails
+            // Don't throw error to avoid breaking the main verification flow
         }
     }
 
